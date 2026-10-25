@@ -53,45 +53,22 @@ class SampleHumanDetector(HumanDetector):
     if self._result is None:
       self._result = self._select_target()
 
+    self._logger.info(f"target={self._result}")
     return self
 
   def _select_target(self) -> Optional[EntityID]:
+    # 既に有効なターゲットがいる場合はそのまま維持
     if self._result is not None and self._is_valid_human(self._result):
       return self._result
 
-    cluster_index: int = self._clustering.get_cluster_index(
-      self._agent_info.get_entity_id()
-    )
-    cluster_entities: list[Entity] = self._clustering.get_cluster_entities(
-      cluster_index
-    )
-
-    cluster_valid_human_entities: list[Entity] = [
-      entity
-      for entity in cluster_entities
-      if self._is_valid_human(entity.get_entity_id()) and isinstance(entity, Civilian)
-    ]
-    if len(cluster_valid_human_entities) != 0:
-      nearest_human_entity = cluster_valid_human_entities[0]
-      nearest_distance = self._world_info.get_distance(
-        self._agent_info.get_entity_id(),
-        nearest_human_entity.get_entity_id(),
-      )
-      for entity in cluster_valid_human_entities:
-        distance = self._world_info.get_distance(
-          self._agent_info.get_entity_id(),
-          entity.get_entity_id(),
-        )
-        if distance < nearest_distance:
-          nearest_distance = distance
-          nearest_human_entity = entity
-      return nearest_human_entity.get_entity_id()
-
+    # 世界全体から有効な市民（Civilian）を取得
     world_valid_human_entities: list[Entity] = [
       entity
       for entity in self._world_info.get_entities_of_types([Civilian])
       if self._is_valid_human(entity.get_entity_id())
     ]
+    
+    # 世界全体の候補から最も距離が近い対象を選択
     if len(world_valid_human_entities) != 0:
       nearest_human_entity = world_valid_human_entities[0]
       nearest_distance = self._world_info.get_distance(
@@ -111,37 +88,40 @@ class SampleHumanDetector(HumanDetector):
     return None
 
   def _is_valid_human(self, target_entity_id: EntityID) -> bool:
+    def reject(reason: str) -> bool:
+        self._logger.info(f"reject {target_entity_id}: {reason}")
+        return False
+
     target: Optional[Entity] = self._world_info.get_entity(target_entity_id)
     if target is None:
-      return False
+        return reject("entity None")
     if not isinstance(target, Human):
-      return False
-    hp: Optional[int] = target.get_hp()
+        return reject("not Human")
+    hp = target.get_hp()
     if hp is None or hp <= 0:
-      return False
-    buriedness: Optional[int] = target.get_buriedness()
+        return reject(f"hp={hp}")
+    buriedness = target.get_buriedness()
     if buriedness is None:
-      return False
+        return reject("buriedness None")
     myself = self._agent_info.get_myself()
     if myself is None:
-      return False
+        return reject("myself None")
     if myself.get_urn() == EntityURN.FIRE_BRIGADE and buriedness == 0:
-      return False
-    if myself.get_urn() == EntityURN.AMBULANCE_TEAM and buriedness > 0:
-      return False
-    damage: Optional[int] = target.get_damage()
-    if damage is None or damage == 0:
-      return False
-    position_entity_id: Optional[EntityID] = target.get_position()
+        return reject("FB & buriedness 0")
+    if myself.get_urn() == EntityURN.AMBULANCE_TEAM and buriedness > 10:
+        return reject(f"AT & buriedness={buriedness}")
+    damage = target.get_damage()
+    if damage is None:
+        return reject(f"damage={damage}")
+    position_entity_id = target.get_position()
     if position_entity_id is None:
-      return False
-    position: Optional[Entity] = self._world_info.get_entity(position_entity_id)
+        return reject("position None")
+    position = self._world_info.get_entity(position_entity_id)
     if position is None:
-      return False
-    urn: EntityURN = position.get_urn()
+        return reject("position entity None")
+    urn = position.get_urn()
     if urn == EntityURN.REFUGE or urn == EntityURN.AMBULANCE_TEAM:
-      return False
-
+        return reject(f"position urn={urn}")
     return True
 
   def get_target_entity_id(self) -> Optional[EntityID]:

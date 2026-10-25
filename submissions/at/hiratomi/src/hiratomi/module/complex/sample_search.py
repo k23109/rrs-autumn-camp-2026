@@ -30,13 +30,7 @@ class SampleSearch(Search):
     self._unreached_building_ids: set[EntityID] = set()
     self._result: Optional[EntityID] = None
 
-    self._clustering: Clustering = cast(
-      Clustering,
-      module_manager.get_module(
-        "hiratomi.Search.Clustering",
-        "adf_core_python.implement.module.algorithm.k_means_clustering.KMeansClustering",
-      ),
-    )
+   
 
     self._path_planning: PathPlanning = cast(
       PathPlanning,
@@ -51,7 +45,7 @@ class SampleSearch(Search):
       self._agent_info,
     )
 
-    self.register_sub_module(self._clustering)
+    
     self.register_sub_module(self._path_planning)
 
   def update_info(self, message_manager: MessageManager) -> Search:
@@ -92,15 +86,12 @@ class SampleSearch(Search):
     return self._result
 
   def _get_search_targets(self) -> set[EntityID]:
-    cluster_index: int = self._clustering.get_cluster_index(
-      self._agent_info.get_entity_id()
-    )
-    cluster_entities: list[Entity] = self._clustering.get_cluster_entities(
-      cluster_index
-    )
+    # クラスタリング関連の処理を削除し、マップ全体の建物を取得する
+    all_entities = self._world_info.get_entities_of_types([Building])
+    
     building_entity_ids: list[EntityID] = [
       entity.get_entity_id()
-      for entity in cluster_entities
+      for entity in all_entities
       if isinstance(entity, Building) and not isinstance(entity, Refuge)
     ]
 
